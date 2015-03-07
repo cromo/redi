@@ -1,0 +1,75 @@
+#!/usr/bin/env python
+
+import re, sys
+
+def main(pattern):
+    sys.stdout.write("%s" % str(parse_ruby_regex(pattern)))
+
+def parse_ruby_regex(pattern):
+    def match_literal(pattern):
+        match = re.match('[^[()]*', pattern)
+        if not match:
+            return None
+        literal = match.group()
+        return ('literal', len(literal), literal)
+        # return ('literal', match.group()) if match else None
+    def match_character_class(pattern):
+        match = re.match('\\[(\\^)?((?:[^\\]]|\\])*?)]', pattern)
+        if not match:
+            return None
+        inverted = ':inverted' if match.group(1) else ''
+        class_members = match.group(2)
+        return ('class' + inverted, len(match.group()), class_members)
+    def match_group(pattern):
+        group_start = re.match('\\((?:\\?(:|=|!|<=|<!|>))?', pattern)
+        if not group_start:
+            return None
+        group_type = ':' + {
+            ':': 'noncapturing',
+            '=': 'positive-lookahead',
+            '!': 'negative-lookahead',
+            '<=': 'positive-lookbehind',
+            '<!': 'negative-lookbehind',
+            '>': 'atomic'
+        }[group_start.group(1)] if group_start.group(1) else ''
+        group_start_len = len(group_start.group())
+        contents = parse(pattern[group_start_len:])
+        if not contents:
+            return None
+        _, content_len, content_ast = contents
+        group_end = re.match('\\)', pattern[group_start_len + content_len:])
+        if not group_end:
+            return None
+        group_end_len = len(group_end.group())
+        return ('group' + group_type, group_start_len + content_len +
+            group_end_len, content_ast)
+    def parse(pattern):
+        offset = 0
+        ast = []
+        while offset < len(pattern):
+            subpattern = pattern[offset:]
+            node = match_character_class(subpattern)
+            if node:
+                ast.append(node)
+                offset += node[1]
+                continue
+            node = match_group(subpattern)
+            if node:
+                ast.append(node)
+                offset += node[1]
+                continue
+            node = match_literal(subpattern)
+            if node and node[2]:
+                ast.append(node)
+                offset += node[1]
+                continue
+            if not node[2]:
+                return ('regex', offset, ast)
+        return ('regex', offset, ast)
+    return parse(pattern)
+
+if __name__ == '__main__':
+    if not sys.argv[1:]:
+        sys.stderr.write("Must be called with a regex\n")
+        sys.exit(1)
+    main(sys.argv[1])
