@@ -3,7 +3,42 @@
 import re, sys
 
 def main(pattern):
-    sys.stdout.write("%s" % str(parse_ruby_regex(pattern)))
+    sys.stdout.write("%s" % render_python_regex(substitute(parse_ruby_regex(pattern), 'group:atomic', convert_atomic_group_to_named_capture_with_backreference)))
+
+def find_nodes(ast, node_type, f):
+    # doesn't handle named groups correctly
+    if ast[0] == 'regex' or ast[0].startswith('group'):
+        for node in ast[2]:
+            find_nodes(node, node_type, f)
+    if ast[0].startswith(node_type):
+        f(ast)
+
+def substitute(ast, node_type, f):
+    if ast[0] == 'regex' or ast[0].startswith('group'):
+        if ast[0].startswith(node_type):
+            return f((ast[0], -1, [substitute(node, node_type, f) for node in ast[2]]))
+        return (ast[0], -1, [substitute(node, node_type, f) for node in ast[2]])
+    if ast[0].startswith(node_type):
+        return f(ast)
+    # Didn't match any of the criteria and cannot be recursively expanded, so
+    # just return the original node.
+    return ast
+
+c = 0
+def gensym():
+    global c
+    symbol = 'gensym_' + str(c)
+    c += 1
+    return symbol
+
+def convert_atomic_group_to_named_capture_with_backreference(ast):
+    group_name = gensym()
+    return ('group:noncapturing', -1, [
+        ('group:positive-lookahead', -1, [
+            ('group:named', -1, {'name': group_name, 'contents': ast[2]})
+        ]),
+        ('group:named-backreference', -1, group_name)
+    ])
 
 def parse_ruby_regex(pattern):
     def match_literal(pattern):
@@ -12,7 +47,6 @@ def parse_ruby_regex(pattern):
             return None
         literal = match.group()
         return ('literal', len(literal), literal)
-        # return ('literal', match.group()) if match else None
     def match_character_class(pattern):
         match = re.match('\\[(\\^)?((?:[^\\]]|\\])*?)]', pattern)
         if not match:
@@ -67,6 +101,48 @@ def parse_ruby_regex(pattern):
                 return ('regex', offset, ast)
         return ('regex', offset, ast)
     return parse(pattern)
+
+def render_python_regex(ast):
+    def regex(content):
+        return ''.join(render(n) for n in content)
+    def literal(content):
+        return content
+    def character_class(content):
+        return ''.join(('[', content, ']'))
+    def inverted_character_class(content):
+        return ''.join(('[^', content, ']'))
+    def group(content):
+        return ''.join(('(', regex(content), ')'))
+    def noncapturing_group(content):
+        return ''.join(('(?:', regex(content), ')'))
+    def positive_lookahead(content):
+        return ''.join(('(?=', regex(content), ')'))
+    def negative_lookahead(content):
+        return ''.join(('(?!', regex(content), ')'))
+    def positive_lookbehind(content):
+        return ''.join(('(?<=', regex(content), ')'))
+    def negative_lookbehind(content):
+        return ''.join(('(?<!', regex(content), ')'))
+    def named_capture(content):
+        return ''.join(('(?P<', content['name'],'>', regex(content['contents']), ')'))
+    def named_backreference(content):
+        return ''.join(('(?P=', content, ')'))
+    def render(ast):
+        return {
+            'regex': regex,
+            'literal': literal,
+            'class': character_class,
+            'class:inverted': inverted_character_class,
+            'group': group,
+            'group:noncapturing': noncapturing_group,
+            'group:positive-lookahead': positive_lookahead,
+            'group:negative-lookahead': negative_lookahead,
+            'group:positive-lookbehind': positive_lookbehind,
+            'group:negative-lookbehind': negative_lookbehind,
+            'group:named': named_capture,
+            'group:named-backreference': named_backreference
+        }[ast[0]](ast[2])
+    return render(ast)
 
 if __name__ == '__main__':
     if not sys.argv[1:]:
