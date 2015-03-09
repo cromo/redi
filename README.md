@@ -4,7 +4,7 @@ Redi (pronounced "re-dye", short for "regex dialect") changes the color of your 
 
 ## Overview
 
-Redi was born of the desire to use [grokpat](https://github.com/cromo/grokpat) with [synesthesia](https://github.com/cromo/synesthesia), but the two using a not-totally compatible regex feature set. A ruby-to-python regex converter was needed, and thus redi was born.
+Redi was born of the desire to use [grokpat](https://github.com/cromo/grokpat) with [synesthesia](https://github.com/cromo/synesthesia), but the two use a not-totally compatible regex feature set. A ruby-to-python regex converter was needed, and thus redi was born.
 
 Presently, it only converts from ruby to python regular expressions, but other dialects are planned to be added as the need arises.
 
