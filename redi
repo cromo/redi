@@ -2,6 +2,8 @@
 
 import re, sys
 
+__version__ = "0.1.0"
+
 def main(pattern):
     sys.stdout.write("%s" % render_python_regex(substitute(parse_ruby_regex(pattern), 'group:atomic', convert_atomic_group_to_named_capture_with_backreference)))
 
@@ -144,7 +146,13 @@ def render_python_regex(ast):
         }[ast[0]](ast[2])
     return render(ast)
 
+def print_version():
+    sys.stdout.write("Redi version %s\n" % __version__)
+
 if __name__ == '__main__':
+    if '-v' in sys.argv[1:] or '--version' in sys.argv[1:]:
+        print_version()
+        sys.exit(0)
     if not sys.argv[1:]:
         sys.stderr.write("Must be called with a regex\n")
         sys.exit(1)
